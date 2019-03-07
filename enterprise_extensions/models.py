@@ -2035,7 +2035,7 @@ def model_2a(psrs, psd='powerlaw', noisedict=None, components=30,
     models = []
     for p in psrs:
         if 'NANOGrav' in p.flags['pta'] and not wideband:
-            s2 = s + white_noise_block(vary=white_vary, inc_ecorr=True)
+            s2 = s + white_noise_block(vary=False, inc_ecorr=True)
             if '1713' in p.name:
                 tmin = p.toas.min() / 86400
                 tmax = p.toas.max() / 86400
@@ -2045,7 +2045,7 @@ def model_2a(psrs, psd='powerlaw', noisedict=None, components=30,
             else:
                 models.append(s2(p))
         else:
-            s4 = s + white_noise_block(vary=white_vary, inc_ecorr=False)
+            s4 = s + white_noise_block(vary=False, inc_ecorr=False)
             if '1713' in p.name:
                 tmin = p.toas.min() / 86400
                 tmax = p.toas.max() / 86400
