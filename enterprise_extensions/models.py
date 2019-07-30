@@ -2068,6 +2068,108 @@ def model_2a(psrs, psd='powerlaw', noisedict=None, components=30,
     return pta
 
 
+def model_2a_hybrid_priors(psrs, psd='powerlaw', noisedict=None, components=30,
+             gamma_common=None, upper_limit_PRN=True, upper_limit_CRN=False, bayesephem=False,
+             wideband=False, select='backend'):
+    """
+    Reads in list of enterprise Pulsar instance and returns a PTA
+    instantiated with model 2A from the analysis paper:
+    per pulsar:
+        1. fixed EFAC per backend/receiver system
+        2. fixed EQUAD per backend/receiver system
+        3. fixed ECORR per backend/receiver system
+        4. Red noise modeled as a power-law with 30 sampling frequencies
+        5. Linear timing model.
+    global:
+        1.Common red noise modeled with user defined PSD with
+        30 sampling frequencies. Available PSDs are
+        ['powerlaw', 'turnover' 'spectrum']
+        2. Optional physical ephemeris modeling.
+    :param psd:
+        PSD to use for common red noise signal. Available options
+        are ['powerlaw', 'turnover' 'spectrum']. 'powerlaw' is default
+        value.
+    :param noisedict:
+        Dictionary of pulsar noise properties. Can provide manually,
+        or the code will attempt to find it.
+    :param gamma_common:
+        Fixed common red process spectral index value. By default we
+        vary the spectral index over the range [0, 7].
+    :param upper_limit_PRN:
+        Perform upper limit on intrinsic pulsar red noise amplitude. By default
+        this is set to False. Note that when perfoming upper limits it
+        is recommended that the spectral index also be fixed to a specific
+        value.
+    :param upper_limit_CRN:
+        Perform upper limit on common red noise amplitude. By default
+        this is set to False. Note that when perfoming upper limits it
+        is recommended that the spectral index also be fixed to a specific
+        value.
+    :param bayesephem:
+        Include BayesEphem model. Set to False by default
+    :param wideband:
+        Use wideband par and tim files. Ignore ECORR. Set to False by default.
+    """
+
+    PRN_amp_prior = 'uniform' if upper_limit_PRN else 'log-uniform'
+    CRN_amp_prior = 'uniform' if upper_limit_CRN else 'log-uniform'
+
+
+    # find the maximum time span to set GW frequency sampling
+    Tspan = model_utils.get_tspan(psrs)
+
+    # red noise
+    s = red_noise_block(prior=PRN_amp_prior, Tspan=Tspan, components=components)
+
+    # common red noise block
+    s += common_red_noise_block(psd=psd, prior=CRN_amp_prior, Tspan=Tspan,
+                                components=components, gamma_val=gamma_common,
+                                name='gw')
+
+    # ephemeris model
+    if bayesephem:
+        s += deterministic_signals.PhysicalEphemerisSignal(use_epoch_toas=True)
+
+    # timing model
+    s += gp_signals.TimingModel()
+
+    # adding white-noise, and acting on psr objects
+    models = []
+    for p in psrs:
+        if 'NANOGrav' in p.flags['pta'] and not wideband:
+            s2 = s + white_noise_block(vary=False, inc_ecorr=True)
+            if '1713' in p.name:
+                tmin = p.toas.min() / 86400
+                tmax = p.toas.max() / 86400
+                s3 = s2 + dm_exponential_dip(tmin=tmin, tmax=tmax, idx=2,
+                                             sign=False, name='dmexp')
+                models.append(s3(p))
+            else:
+                models.append(s2(p))
+        else:
+            s4 = s + white_noise_block(vary=False, inc_ecorr=False)
+            if '1713' in p.name:
+                tmin = p.toas.min() / 86400
+                tmax = p.toas.max() / 86400
+                s5 = s4 + dm_exponential_dip(tmin=tmin, tmax=tmax, idx=2,
+                                             sign=False, name='dmexp')
+                models.append(s5(p))
+            else:
+                models.append(s4(p))
+
+    # set up PTA
+    pta = signal_base.PTA(models)
+
+    # set white noise parameters
+    if noisedict is None:
+        print('No noise dictionary provided!...')
+    else:
+        noisedict = noisedict
+        pta.set_default_params(noisedict)
+
+    return pta
+
+
 def model_general(psrs, psd='powerlaw', noisedict=None, tm_svd=False, tm_norm=True,
                   orf=None, components=30, gamma_common=None, upper_limit=False,
                   bayesephem=False, wideband=False, dm_var=False, dm_type='gp',
