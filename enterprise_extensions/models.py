@@ -2069,7 +2069,7 @@ def model_2a(psrs, psd='powerlaw', noisedict=None, components=30,
 
 
 def model_2a_hybrid_priors(psrs, psd='powerlaw', noisedict=None, components=30,
-             gamma_common=None, upper_limit_PRN=True, upper_limit_CRN=False, bayesephem=False,
+             gamma_common=None, upper_limit_PRN=False, upper_limit_CRN=False, bayesephem=False,
              wideband=False, select='backend'):
     """
     Reads in list of enterprise Pulsar instance and returns a PTA
