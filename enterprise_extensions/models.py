@@ -2111,8 +2111,8 @@ def model_2a_hybrid_priors(psrs, psd='powerlaw', noisedict=None, components=30,
         Use wideband par and tim files. Ignore ECORR. Set to False by default.
     """
 
-    PRN_amp_prior = 'uniform' if upper_limit_PRN else 'log-uniform'
-    CRN_amp_prior = 'uniform' if upper_limit_CRN else 'log-uniform'
+    PRN_amp_prior = 'uniform' if PRN_limit else 'log-uniform'
+    CRN_amp_prior = 'uniform' if CRN_limit else 'log-uniform'
 
 
     # find the maximum time span to set GW frequency sampling
