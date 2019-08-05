@@ -2257,10 +2257,10 @@ def model_common_processes(ORF, psrs, gamma_array, psd='powerlaw', noisedict=Non
     for p in psrs:
         if 'NANOGrav' in p.flags['pta'] and not wideband:
             s2 = s + white_noise_block(vary=False, inc_ecorr=True)
-            models.append(s2(p))
+            pta_models.append(s2(p))
         else:
             s3 = s + white_noise_block(vary=False, inc_ecorr=False)
-            models.append(s3(p))
+            pta_models.append(s3(p))
 
     # for p in psrs:
     #     if 'NANOGrav' in p.flags['pta'] and not wideband:
