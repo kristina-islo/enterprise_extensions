@@ -2138,24 +2138,31 @@ def model_2a_hybrid_priors(psrs, psd='powerlaw', noisedict=None, components=30,
     for p in psrs:
         if 'NANOGrav' in p.flags['pta'] and not wideband:
             s2 = s + white_noise_block(vary=False, inc_ecorr=True)
-            if '1713' in p.name:
-                tmin = p.toas.min() / 86400
-                tmax = p.toas.max() / 86400
-                s3 = s2 + dm_exponential_dip(tmin=tmin, tmax=tmax, idx=2,
-                                             sign=False, name='dmexp')
-                models.append(s3(p))
-            else:
-                models.append(s2(p))
+            models.append(s2(p))
         else:
-            s4 = s + white_noise_block(vary=False, inc_ecorr=False)
-            if '1713' in p.name:
-                tmin = p.toas.min() / 86400
-                tmax = p.toas.max() / 86400
-                s5 = s4 + dm_exponential_dip(tmin=tmin, tmax=tmax, idx=2,
-                                             sign=False, name='dmexp')
-                models.append(s5(p))
-            else:
-                models.append(s4(p))
+            s3 = s + white_noise_block(vary=False, inc_ecorr=False)
+            models.append(s3(p))
+    # for p in psrs:
+    #     if 'NANOGrav' in p.flags['pta'] and not wideband:
+    #         s2 = s + white_noise_block(vary=False, inc_ecorr=True)
+    #         if '1713' in p.name:
+    #             tmin = p.toas.min() / 86400
+    #             tmax = p.toas.max() / 86400
+    #             s3 = s2 + dm_exponential_dip(tmin=tmin, tmax=tmax, idx=2,
+    #                                          sign=False, name='dmexp')
+    #             models.append(s3(p))
+    #         else:
+    #             models.append(s2(p))
+    #     else:
+    #         s4 = s + white_noise_block(vary=False, inc_ecorr=False)
+    #         if '1713' in p.name:
+    #             tmin = p.toas.min() / 86400
+    #             tmax = p.toas.max() / 86400
+    #             s5 = s4 + dm_exponential_dip(tmin=tmin, tmax=tmax, idx=2,
+    #                                          sign=False, name='dmexp')
+    #             models.append(s5(p))
+    #         else:
+    #             models.append(s4(p))
 
     # set up PTA
     pta = signal_base.PTA(models)
@@ -2168,6 +2175,140 @@ def model_2a_hybrid_priors(psrs, psd='powerlaw', noisedict=None, components=30,
         pta.set_default_params(noisedict)
 
     return pta
+
+
+def model_common_processes(ORF, psrs, gamma_array, psd='powerlaw', noisedict=None, components=30, 
+              upper_limit=False, bayesephem=False,
+             wideband=False, select='backend'):
+    """
+    Reads in list of enterprise Pulsar instance and returns a PTA
+    instantiated with model 3A from the analysis paper:
+
+    per pulsar:
+        1. fixed EFAC per backend/receiver system
+        2. fixed EQUAD per backend/receiver system
+        3. fixed ECORR per backend/receiver system
+        4. Red noise modeled as a power-law with 30 sampling frequencies
+        5. Linear timing model.
+
+
+    global:
+        1. GWB with HD correlations modeled with user defined PSD with
+        30 sampling frequencies. Available PSDs are
+        ['powerlaw', 'turnover' 'spectrum']
+        2. Optional physical ephemeris modeling.
+        3. Overlap reduction function coefficients corresponding to 
+        model '2a' or '3a' of enterprise_extensions.models. Available 
+        values are ['hd', 'None'].
+
+    :param gamma_array:
+        Array of fixed or varying spectral indices for a common red process. 
+        'None' value indicated varied.
+    :param psd:
+        PSD to use for common red noise signal. Available options
+        are ['powerlaw', 'turnover' 'spectrum'] 'powerlaw' is default
+        value.
+    :param upper_limit:
+        Perform upper limit on common red noise amplitude. By default
+        this is set to False. Note that when perfoming upper limits it
+        is recommended that the spectral index also be fixed to a specific
+        value.
+    :param bayesephem:
+        Include BayesEphem model. Set to False by default
+    """
+
+    # Basic 2a/3a model sans any common process
+    amp_prior = 'uniform' if upper_limit else 'log-uniform'
+
+    # find the maximum time span to set GW frequency sampling
+    Tspan = model_utils.get_tspan(psrs)
+
+    # red noise
+    s = red_noise_block(prior=amp_prior, Tspan=Tspan, components=components)
+
+    # # common red noise block
+    # s += common_red_noise_block(psd=psd, prior=amp_prior, Tspan=Tspan,
+    #                             components=components, gamma_val=gamma_common,
+    #                             name='gw')
+
+    # # common red noise block
+    ct = 0
+    for gamma in gamma_array:
+
+      # if gamma is a number make it a float
+      try:
+        gamma = float(gamma)
+        print("Including fixed spectral index common process of value {}".format(gamma))
+
+      except ValueError:
+        if gamma == 'None':
+          gamma = None
+          print("Including varying spectral index common process...")
+
+        else:
+          print('Not sure what to do with gamma={}. Not including this process.'.format(gamma))
+
+      if ct < len(gamma_array):
+        if ORF == 'None':
+          s += common_red_noise_block(psd=psd, prior=amp_prior, Tspan=Tspan,
+                                  components=components, gamma_val=gamma,
+                                  name='gw_common_{}'.format(ct))
+        elif ORF == 'hd':
+          s += common_red_noise_block(psd=psd, prior=amp_prior, Tspan=Tspan,
+                                components=components, gamma_val=gamma,
+                                orf='hd', name='gw_common_{}'.format(ct))
+      ct += 1
+
+    # ephemeris model
+    if bayesephem:
+        s += deterministic_signals.PhysicalEphemerisSignal(use_epoch_toas=True)
+
+    # timing model
+    s += gp_signals.TimingModel()
+
+    # adding white-noise, and acting on psr objects
+    pta_models = []
+    for p in psrs:
+        if 'NANOGrav' in p.flags['pta'] and not wideband:
+            s2 = s + white_noise_block(vary=False, inc_ecorr=True)
+            models.append(s2(p))
+        else:
+            s3 = s + white_noise_block(vary=False, inc_ecorr=False)
+            models.append(s3(p))
+
+    # for p in psrs:
+    #     if 'NANOGrav' in p.flags['pta'] and not wideband:
+    #         s2 = s + white_noise_block(vary=False, inc_ecorr=True)
+    #         if '1713' in p.name:
+    #             tmin = p.toas.min() / 86400
+    #             tmax = p.toas.max() / 86400
+    #             s3 = s2 + dm_exponential_dip(tmin=tmin, tmax=tmax, idx=2,
+    #                                          sign=False, name='dmexp')
+    #             pta_models.append(s3(p))
+    #         else:
+    #             pta_models.append(s2(p))
+    #     else:
+    #         s4 = s + white_noise_block(vary=False, inc_ecorr=False)
+    #         if '1713' in p.name:
+    #             tmin = p.toas.min() / 86400
+    #             tmax = p.toas.max() / 86400
+    #             s5 = s4 + dm_exponential_dip(tmin=tmin, tmax=tmax, idx=2,
+    #                                          sign=False, name='dmexp')
+    #             pta_models.append(s5(p))
+    #         else:
+    #             pta_models.append(s4(p))
+
+    # set up PTA
+    pta = signal_base.PTA(pta_models)
+
+    # set white noise parameters
+    if noisedict is None:
+      print('No noise dictionary provided!...')
+    else:
+      pta.set_default_params(noisedict)
+
+
+    return pta 
 
 
 def model_general(psrs, psd='powerlaw', noisedict=None, tm_svd=False, tm_norm=True,
