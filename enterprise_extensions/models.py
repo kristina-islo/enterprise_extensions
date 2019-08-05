@@ -2033,27 +2033,13 @@ def model_2a(psrs, psd='powerlaw', noisedict=None, components=30,
 
     # adding white-noise, and acting on psr objects
     models = []
-    # for p in psrs:
-    #     if 'NANOGrav' in p.flags['pta'] and not wideband:
-    #         s2 = s + white_noise_block(vary=False, inc_ecorr=True)
-    #         if '1713' in p.name:
-    #             tmin = p.toas.min() / 86400
-    #             tmax = p.toas.max() / 86400
-    #             s3 = s2 + dm_exponential_dip(tmin=tmin, tmax=tmax, idx=2,
-    #                                          sign=False, name='dmexp')
-    #             models.append(s3(p))
-    #         else:
-    #             models.append(s2(p))
-    #     else:
-    #         s4 = s + white_noise_block(vary=False, inc_ecorr=False)
-    #         if '1713' in p.name:
-    #             tmin = p.toas.min() / 86400
-    #             tmax = p.toas.max() / 86400
-    #             s5 = s4 + dm_exponential_dip(tmin=tmin, tmax=tmax, idx=2,
-    #                                          sign=False, name='dmexp')
-    #             models.append(s5(p))
-    #         else:
-    #             models.append(s4(p))
+    for p in psrs:
+        if 'NANOGrav' in p.flags['pta'] and not wideband:
+            s2 = s + white_noise_block(vary=False, inc_ecorr=True, select=select)
+            models.append(s2(p))
+        else:
+            s3 = s + white_noise_block(vary=False, inc_ecorr=False, select=select)
+            models.append(s3(p))
 
     # set up PTA
     pta = signal_base.PTA(models)
